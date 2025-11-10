@@ -41,12 +41,6 @@ const ThreadChatBox: FC<ThreadChatBoxProps> = ({ parentMessage, currentUserId, c
 
   // Listen for thread messages
   useEffect(() => {
-    // const basePath = isGroup
-    //   ? ["groupChats", chatWithUserId, "messages", parentMessage.id, "threads"]
-    //   : ["chats", currentUserId, chatWithUserId, parentMessage.id, "threads"];
-
-    // const tuplePath = (...paths: string[]) => paths as [string, ...string[]];
-    //const threadRef = collection(db, ...tuplePath(...basePath));
     const threadRef = getThreadCollection();
 
     const q = query(threadRef, orderBy("timestamp"));
@@ -117,7 +111,7 @@ const ThreadChatBox: FC<ThreadChatBoxProps> = ({ parentMessage, currentUserId, c
   return (
     <>
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black/35 backdrop-blur-sm bg-opacity-30 z-40" onClick={handleClose} />
+      <div className="absolute inset-0 z-40" onClick={handleClose} />
 
       {/* Thread panel */}
       <div className={`absolute top-0 right-0 w-120 h-full bg-white dark:bg-gray-800 shadow-xl flex flex-col z-50 transition-transform duration-300 ${open ? "translate-x-0" : "translate-x-full"}`}>

@@ -41,12 +41,6 @@ const ThreadChatBox: FC<ThreadChatBoxProps> = ({ parentMessage, currentUserId, c
 
   // Listen for thread messages
   useEffect(() => {
-    // const basePath = isGroup
-    //   ? ["groupChats", chatWithUserId, "messages", parentMessage.id, "threads"]
-    //   : ["chats", currentUserId, chatWithUserId, parentMessage.id, "threads"];
-
-    // const tuplePath = (...paths: string[]) => paths as [string, ...string[]];
-    //const threadRef = collection(db, ...tuplePath(...basePath));
     const threadRef = getThreadCollection();
 
     const q = query(threadRef, orderBy("timestamp"));
@@ -117,7 +111,7 @@ const ThreadChatBox: FC<ThreadChatBoxProps> = ({ parentMessage, currentUserId, c
   return (
     <>
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black/35 backdrop-blur-sm bg-opacity-30 z-40" onClick={handleClose} />
+      <div className="absolute inset-0 z-40" onClick={handleClose} />
 
       {/* Thread panel */}
       <div className={`absolute top-0 right-0 w-120 h-full bg-white dark:bg-gray-800 shadow-xl flex flex-col z-50 transition-transform duration-300 ${open ? "translate-x-0" : "translate-x-full"}`}>
@@ -132,41 +126,6 @@ const ThreadChatBox: FC<ThreadChatBoxProps> = ({ parentMessage, currentUserId, c
             <X size={22} className="mr-2 opacity-80 hover:opacity-100 transition" />
           </button>
         </div>
-
-
-
-        {/* Messages */}
-        {/* <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {threadMessages.map(msg => {
-            const isSender = msg.senderId === currentUserId;
-            return (
-              <div key={msg.id} className={`flex ${isSender ? "justify-end" : "justify-start"} items-end`}>
-                {!isSender && (
-                  <img src={msg.senderAvatar} alt={msg.senderName} className="w-6 h-6 rounded-full mr-2 mt-1" />
-                )}
-
-                <div className="flex flex-col max-w-xs">
-                  <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                    {msg.senderName}
-                  </div>
-
-                  <div className={`px-3 py-2 rounded-lg break-words ${isSender ? "bg-blue-500 text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100"}`}>
-                    {msg.text}
-                  </div>
-
-                  <div className={`text-[10px] text-gray-400 mt-1 self-${isSender ? "end" : "start"}`}>
-                    {msg.timestamp?.toDate ? msg.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
-                  </div>
-                </div>
-
-                {isSender && (
-                  <img src={msg.senderAvatar} alt={msg.senderName} className="w-6 h-6 rounded-full ml-2 mt-1" />
-                )}
-              </div>
-            );
-          })}
-          <div ref={messagesEndRef} />
-        </div> */}
 
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {threadMessages.map(msg => {
@@ -198,20 +157,6 @@ const ThreadChatBox: FC<ThreadChatBoxProps> = ({ parentMessage, currentUserId, c
           })}
           <div ref={messagesEndRef} />
         </div>
-
-
-        {/* Input */}
-        {/* <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex">
-          <input
-            type="text"
-            value={message}
-            onChange={e => setMessage(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && sendMessage()}
-            placeholder="Reply..."
-            className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg p-2 mr-2 dark:bg-gray-700 dark:text-white"
-          />
-          <button onClick={sendMessage} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">Send</button>
-        </div> */}
 
         {/* Thread Input Section */}
         <div className="relative p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">

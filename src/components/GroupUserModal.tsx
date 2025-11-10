@@ -93,7 +93,7 @@ const GroupUserModal: FC<GroupUserModalProps> = ({
   return (
     <>
       {/* Overlay */}
-      <div className="fixed inset-0 bg-black/35 backdrop-blur-sm z-40" onClick={handleClose} />
+      <div className="fixed inset-0 z-40" onClick={handleClose} />
 
       {/* Modal */}
       <div className={`fixed top-0 right-0 w-[480px] h-full bg-white dark:bg-gray-800 shadow-xl flex flex-col z-50 transition-transform duration-300 ${open ? "translate-x-0" : "translate-x-full"}`}>

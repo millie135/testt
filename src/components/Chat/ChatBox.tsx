@@ -1,9 +1,9 @@
 "use client";
 
 import { FC, useEffect, useState, useRef } from "react";
-import { auth, db, rtdb, storage } from "@/firebaseConfig";
+import { auth, db, rtdb } from "@/firebaseConfig";
 import { ref as rtdbRef, onValue } from "firebase/database";
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+//import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   collection,
   doc,
@@ -16,7 +16,7 @@ import {
   getDocs
 } from "firebase/firestore";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
-import ThreadChatBox from "./ThreadChatBox";
+//import ThreadChatBox from "./ThreadChatBox";
 import { MessageSquareReply, LockKeyhole, User, SendHorizontal, Smile } from "lucide-react";
 import GroupUserModal from "@/components/GroupUserModal";
 
@@ -103,7 +103,7 @@ const ChatBox: FC<ChatBoxProps> = ({
   const [showMembers, setShowMembers] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [userStatuses, setUserStatuses] = useState<{ [key: string]: "online" | "onBreak" | "offline" }>({});
-  const [showUserModal, setShowUserModal] = useState(false);
+  //const [showUserModal, setShowUserModal] = useState(false);
   const [groupInfo, setGroupInfo] = useState<{ createdBy?: string; createdAt?: any } | null>(null);
 
   // ---- REFS ----
@@ -169,10 +169,31 @@ const ChatBox: FC<ChatBoxProps> = ({
     : new Date().toLocaleString();
 
   // In ChatBox component
-  const handleReplyClick = (message: Message) => {
-    onOpenThread?.(message); 
-    setSelectedMessageId(message.id);
+  // const handleReplyClick = (message: Message) => {
+  //   onOpenThread?.(message); 
+  //   setSelectedMessageId(message.id);
+  // };
+
+  const handleReplyClick = (msg: Message) => {
+    onOpenThread?.(msg);
+    setSelectedMessageId(msg.id);
+
+    // Subscribe to thread count dynamically
+    const threadRef = isGroup
+      ? collection(db, "groupChats", chatWithUserId, "messages", msg.id, "threads")
+      : collection(db, "chats", currentUserId, chatWithUserId, msg.id, "threads");
+
+    const unsubscribe = onSnapshot(threadRef, (snap) => {
+      const count = snap.size;
+      setMessages(prev =>
+        prev.map(m => m.id === msg.id ? { ...m, threadCount: count } : m)
+      );
+    });
+
+    // Clean up on thread close
+    return () => unsubscribe();
   };
+
 
   const applyFormat = (type: "bold" | "italic" | "strike") => {
     const selection = window.getSelection();
@@ -384,7 +405,7 @@ const ChatBox: FC<ChatBoxProps> = ({
   }, [chatWithUserId, isGroup]);
 
   // ---- EFFECT: LISTEN TO MESSAGES (SAFE GUARD + CLEANUP) ----
-  useEffect(() => {
+  /*useEffect(() => {
     if (!currentUserId || !chatWithUserId) return;
 
     let threadUnsubscribers: (() => void)[] = [];
@@ -445,12 +466,82 @@ const ChatBox: FC<ChatBoxProps> = ({
       unsubscribe();
       threadUnsubscribers.forEach(fn => fn());
     };
+  }, [chatWithUserId, currentUserId, isGroup]);*/
+
+  useEffect(() => {
+    if (!currentUserId || !chatWithUserId) return;
+
+    const messagesRef = isGroup
+      ? collection(db, "groupChats", chatWithUserId, "messages")
+      : collection(db, "chats", currentUserId, chatWithUserId);
+
+    const q = query(messagesRef, orderBy("timestamp", "asc")); // optionally limit(50) for pagination
+    let unsubThreadListeners: (() => void)[] = [];
+
+    const unsubscribe = onSnapshot(q, async snapshot => {
+      // const msgs: Message[] = snapshot.docs.map(docSnap => {
+      //   const data = docSnap.data() as Omit<Message, "id">;
+      //   return { id: docSnap.id, threadCount: data.threadCount || 0, ...data };
+      // });
+      unsubThreadListeners.forEach(fn => fn());
+      unsubThreadListeners = [];
+      const msgs: Message[] = snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<Message, "id">),
+      }));
+
+
+      // Update messages state once
+      setMessages(msgs);
+
+      // Set up live thread count listeners
+      //const unsubThreadListeners: (() => void)[] = [];
+
+      // Mark unread messages as read in batch
+      const batch: Promise<any>[] = [];
+      msgs.forEach(msg => {
+        if (!msg.readBy?.[currentUserId] && msg.senderId !== currentUserId) {
+          const msgRef = isGroup
+            ? doc(db, "groupChats", chatWithUserId, "messages", msg.id)
+            : doc(db, "chats", currentUserId, chatWithUserId, msg.id);
+
+          batch.push(
+            setDoc(msgRef, { readBy: { ...(msg.readBy || {}), [currentUserId]: true } }, { merge: true })
+          );
+        }
+        const threadRef = isGroup
+        ? collection(db, "groupChats", chatWithUserId, "messages", msg.id, "threads")
+        : collection(db, "chats", currentUserId, chatWithUserId, msg.id, "threads");
+
+        const unsubscribeThread = onSnapshot(threadRef, snap => {
+          const count = snap.size;
+          setMessages(prev =>
+            prev.map(m => m.id === msg.id ? { ...m, threadCount: count } : m)
+          );
+        });
+
+        unsubThreadListeners.push(unsubscribeThread);
+      });
+      if (batch.length) await Promise.all(batch);
+
+      // Update unread count
+      //const newUnread = msgs.filter(m => !m.readBy?.[currentUserId] && m.senderId !== currentUserId).length;
+      //setUnreadCount(newUnread);
+      //return () => unsubThreadListeners.forEach(fn => fn());
+    });
+
+    //return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubThreadListeners.forEach(fn => fn());
+    };
   }, [chatWithUserId, currentUserId, isGroup]);
+
 
   useEffect(scrollToBottom, [messages]);
 
   // ---- SEND MESSAGE ----
-  const sendMessage = async (text?: string, imageUrl?: string) => {
+  /*const sendMessage = async (text?: string, imageUrl?: string) => {
     if (!text?.trim() && !imageUrl) return;
     if (!currentUserId) return; // guard on logout
 
@@ -487,7 +578,56 @@ const ChatBox: FC<ChatBoxProps> = ({
     } catch (err) {
       console.error("Error sending message:", err);
     }
+  };*/
+
+  const sendMessage = async (text?: string, imageUrl?: string) => {
+    if (!text?.trim() && !imageUrl) return;
+    if (!currentUserId) return;
+
+    const senderSnap = await getDoc(doc(db, "users", currentUserId));
+    const senderData = senderSnap.data();
+    const senderName = senderData?.username || "Unknown";
+    const senderAvatar = senderData?.avatar || `https://avatars.dicebear.com/api/identicon/${currentUserId}.svg`;
+
+    const messageDocRef = isGroup
+      ? doc(collection(db, "groupChats", chatWithUserId, "messages"))
+      : doc(collection(db, "chats", currentUserId, chatWithUserId));
+
+    const messageData: Message = {
+      id: messageDocRef.id,
+      text: text || "",
+      senderId: currentUserId,
+      senderName,
+      senderAvatar,
+      timestamp: serverTimestamp(),
+      imageUrl: imageUrl ?? null,
+      reactions: {},
+      to: chatWithUserId,
+      readBy: { [currentUserId]: true },
+      threadCount: 0,
+    };
+
+    // Optimistic UI update
+    setMessages(prev => [...prev, messageData]);
+
+    try {
+      if (isGroup) {
+        await setDoc(messageDocRef, messageData);
+      } else {
+        await Promise.all([
+          setDoc(messageDocRef, messageData),
+          setDoc(doc(db, "chats", chatWithUserId, currentUserId, messageDocRef.id), messageData),
+        ]);
+      }
+    } catch (err) {
+      console.error("Error sending message:", err);
+    }
+
+    setMessage("");
+    if (messageRef.current) messageRef.current.innerHTML = "";
+    scrollToBottom();
   };
+
 
   // ---- REACTIONS ----
   const toggleReaction = async (msg: Message, emoji: string) => {
@@ -522,32 +662,34 @@ const ChatBox: FC<ChatBoxProps> = ({
             <div className="font-bold text-gray-900 dark:text-gray-100">{profile.username}</div>
             )}
             {isGroup && (
-              <div className="flex items-center space-x-2 font-semibold text-gray-900 dark:text-gray-100">
-                <span>{profile.username}</span>
-                <button
-                  onClick={() => setShowGroupInfo(true)}
-                  className="flex items-center space-x-1 px-2 py-1 rounded transition hover:opacity-90 bg-[#910a6730] text-gray-900 dark:text-gray-100"
-                >
-                  {/* User icon */}
-                    <User size={18} className="opacity-80" strokeWidth={2.5} />
-                    {/* Total members count */}
-                    <span className="text-sm font-medium">
-                      {groupMemberProfiles.length}
-                    </span>
+              <>
+                <div className="flex items-center space-x-2 font-semibold text-gray-900 dark:text-gray-100">
+                  <span>{profile.username}</span>
+                  <button
+                    onClick={() => setShowGroupInfo(true)}
+                    className="flex items-center space-x-1 px-2 py-1 rounded transition hover:opacity-90 bg-[#910a6730] text-gray-900 dark:text-gray-100"
+                  >
+                    {/* User icon */}
+                      <User size={18} className="opacity-80" strokeWidth={2.5} />
+                      {/* Total members count */}
+                      <span className="text-sm font-medium">
+                        {groupMemberProfiles.length}
+                      </span>
 
-                </button>
-              </div>
+                  </button>
+                </div>
+                {/* Modal */}
+                <GroupUserModal
+                  isOpen={showGroupInfo}
+                  onClose={() => setShowGroupInfo(false)}
+                  groupId={chatWithUserId}
+                  groupName={profile.username}
+                  currentUserId={currentUserId}
+                  groupNum={groupMemberProfiles.length}
+                  userStatuses={userStatuses}  
+                />
+              </>
             )}
-            {/* Modal */}
-            <GroupUserModal
-              isOpen={showGroupInfo}
-              onClose={() => setShowGroupInfo(false)}
-              groupId={chatWithUserId}
-              groupName={profile.username}
-              currentUserId={currentUserId}
-              groupNum={groupMemberProfiles.length}
-              userStatuses={userStatuses}  
-            />
           </div>
         </div>
       </div>
@@ -731,10 +873,6 @@ const ChatBox: FC<ChatBoxProps> = ({
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault(); 
-              //sendMessage(message);
-              //sendMessage(messageRef.current?.innerHTML || ""); 
-              // setMessage(""); // clear the input
-              // if (messageRef.current) messageRef.current.innerText = ""; // clear div
               if (messageRef.current?.innerHTML.trim()) {
                 sendMessage(messageRef.current.innerHTML);
                 setMessage("");

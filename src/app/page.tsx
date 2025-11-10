@@ -4,8 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import SignUp from "@/components/Auth/SignUp";
 import SignIn from "@/components/Auth/SignIn";
 import ChatBox from "@/components/Chat/ChatBox";
-import ManageMembersSidebar from "@/components/Chat/ManageMembersSidebar";
-import AddMemberModal from "@/components/Modals/AddMemberModal";
 import CreateGroupModal from "@/components/Modals/CreateGroupModal";
 import TimeManagement, { TimeManagementHandle } from "@/components/Time/TimeManagement";
 import { UserType, Group } from "@/types";
@@ -22,17 +20,12 @@ import {
   orderBy,
   getDoc,
   doc,
-  setDoc,
   serverTimestamp,
   updateDoc,
   where,
   getDocs,
-  arrayUnion,
   addDoc,
   runTransaction,
-  QuerySnapshot,
-  DocumentData,
-  arrayRemove, 
 } from "firebase/firestore";
 import { ref, set as rtdbSet, onDisconnect, onValue } from "firebase/database";
 
@@ -43,7 +36,6 @@ export default function Home() {
   const [users, setUsers] = useState<UserType[]>([]);
   const [chatUser, setChatUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  //const [userStatuses, setUserStatuses] = useState<{ [key: string]: boolean }>({});
   type StatusType = "online" | "onBreak" | "offline";
 
   const [userStatuses, setUserStatuses] = useState<{ [key: string]: StatusType }>({});
@@ -52,15 +44,12 @@ export default function Home() {
   const prevUnreadCounts = useRef<{ [key: string]: number }>({});
   const [groups, setGroups] = useState<Group[]>([]);
 
-  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
 
   const notificationAudio = useRef<HTMLAudioElement | null>(null);
   const unsubscribersRef = useRef<(() => void)[]>([]);
   const sessionIdRef = useRef<string | null>(null);
-  const [showManageMembers, setShowManageMembers] = useState(false);
   const isManualLogout = useRef(false);
   const groupListenersRef = useRef<{ [groupId: string]: () => void }>({});
   // inside Home component
@@ -68,8 +57,6 @@ export default function Home() {
   const [activeMenu, setActiveMenu] = useState<"home" | "notifications" | "logo">("home");
   const [isPrivateChatsOpen, setIsPrivateChatsOpen] = useState(false);
   const [isGroupChatsOpen, setIsGroupChatsOpen] = useState(false);
-  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
-  const [selectedMessage, setSelectedMessage] = useState<any>(null);
   
   // Thread state (new unified state)
   const [threadState, setThreadState] = useState<{
@@ -586,21 +573,6 @@ export default function Home() {
     }
   };
 
-
-  const handleAddMember = async (groupId: string, memberId: string) => {
-    const groupRef = doc(db, "groups", groupId);
-    await updateDoc(groupRef, {
-      members: arrayUnion(memberId),
-    });
-  };
-
-  const handleRemoveMember = async (groupId: string, memberId: string) => {
-    const groupRef = doc(db, "groups", groupId);
-    await updateDoc(groupRef, {
-      members: arrayRemove(memberId),
-    });
-  };
-
   const handleCreateGroupSubmit = async (groupData: {
     name: string;
     avatar: string;
@@ -821,18 +793,6 @@ export default function Home() {
                                 {unreadCounts[g.id]}
                               </span>
                             )}
-                            {/* {user.role === "Leader" && (
-                              <button
-                                className="text-xs px-2 py-0.5 bg-[#910A67] text-white rounded hover:bg-[#910A67]"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedGroup(g);
-                                  setShowManageMembers(true);
-                                }}
-                              >
-                                Manage
-                              </button>
-                            )} */}
                           </div>
                         </li>
                       ))}
@@ -939,40 +899,11 @@ export default function Home() {
             </div>
           </main>
 
-        {/* === Manage Members Modal (centered) === */}
-        {/* {showManageMembers && selectedGroup && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/35 backdrop-blur-sm"
-              onClick={() => setShowManageMembers(false)}
-            />
-      
-            <div className="relative bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg w-96 z-10">
-              <ManageMembersSidebar
-                group={selectedGroup}
-                users={users}
-                onAddMember={(memberId) => handleAddMember(selectedGroup.id, memberId)}
-                onRemoveMember={(memberId) => handleRemoveMember(selectedGroup.id, memberId)}
-                onClose={() => setShowManageMembers(false)}
-              />
-            </div>
-          </div>
-        )} */}
-
         {/* === Modals === */}
         {showCreateGroupModal && (
           <CreateGroupModal
             onClose={() => setShowCreateGroupModal(false)}
             onSubmit={handleCreateGroupSubmit}
-          />
-        )}
-
-        {showAddMemberModal && selectedGroup && (
-          <AddMemberModal
-            group={selectedGroup}
-            users={users}
-            onAddMember={(memberId) => handleAddMember(selectedGroup.id, memberId)}
-            onClose={() => setShowAddMemberModal(false)}
           />
         )}
         </div>

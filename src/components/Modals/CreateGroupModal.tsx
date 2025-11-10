@@ -25,9 +25,9 @@ export default function CreateGroupModal({ onClose, onSubmit }: Props) {
     onSubmit({
       name: groupName.trim(),
       avatar: avatar.trim() || `https://avatars.dicebear.com/api/identicon/${groupName}.svg`,
-      createdBy: "",   // temporarily empty, parent will fill
-      members: [],     // parent will fill
-      createdAt: new Date(), // parent may override with serverTimestamp
+      createdBy: "",   
+      members: [],     
+      createdAt: new Date(),
     });
 
     // Reset form
