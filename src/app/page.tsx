@@ -720,20 +720,20 @@ export default function Home() {
                       ></span>
                     </div>
                     <div>
-                      <p className="font-semibold text-white">{user.username}</p>
-                      <p className="text-xs text-gray-500">{user.role}</p>
+                      <p className="text-sm font-semibold text-white truncate">{user.username}</p>
+                      <p className="text-xs text-gray-400 truncate">{user.role}</p>
                     </div>
                   </div>
                   <button
                     onClick={handleSignOut}
-                    className="text-sm px-3 py-1 bg-[#720455] hover:bg-[#910A67] text-white rounded"
+                    className="text-sm  font-semibold px-2 py-1 bg-[#720455] hover:bg-[#910A67] text-white rounded-sm transition-colors duration-200"
                   >
-                    Sign out
+                    SIGN OUT
                   </button>
+
                 </div>
                         
-                <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                  
+                <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-white scrollbar-track-transparent scrollbar-fast">
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center space-x-2 cursor-pointer justify-between w-full" onClick={() => setIsGroupChatsOpen(!isGroupChatsOpen)}>
@@ -745,7 +745,9 @@ export default function Home() {
                             ) : (
                               <ChevronRight className="w-4 h-4 text-white" />
                             )}
-                            <h3 className="text-sm uppercase tracking-wide text-white px-2">Group Chats</h3>
+                            <h3 className="text-sm font-bold uppercase tracking-tight text-white px-2">
+                              Group Chats
+                            </h3>
                           </div>
                         </div>
                         <div>
@@ -755,7 +757,7 @@ export default function Home() {
                               e.stopPropagation(); 
                               setShowCreateGroupModal(true);
                             }}
-                            className="text-xs px-2 py-1 bg-[#720455] hover:bg-[#910A67] text-white rounded"
+                            className="text-sm font-semibold px-2 py-1 bg-[#720455] hover:bg-[#910A67] text-white rounded-md transition-colors duration-200"
                           >
                             + New
                           </button>
@@ -784,7 +786,7 @@ export default function Home() {
                               alt={g.name}
                               className="w-8 h-8 rounded-full"
                             />
-                            <span className="text-white">{g.name}</span>
+                            <span className="text-sm font-semibold text-white truncate">{g.name}</span>
                           </div>
 
                           <div className="flex items-center space-x-1">
@@ -810,7 +812,9 @@ export default function Home() {
                       ) : (
                         <ChevronRight className="w-4 h-4 text-white" />
                       )}
-                      <h3 className="text-sm uppercase tracking-wide text-white">Private Chats</h3>
+                      <h3 className="text-sm font-bold uppercase tracking-tight text-white px-2">
+                        Private Chats
+                      </h3>
                     </div>
                     <ul
                       className={`space-y-1 overflow-hidden transition-[max-height] duration-300 ${
@@ -829,7 +833,7 @@ export default function Home() {
                         >
                           <div className="flex items-center space-x-2">
                             <img src={u.avatar} alt={u.username} className="w-8 h-8 rounded-full" />
-                            <span className="text-white">{u.username}</span>
+                            <span className="text-sm font-semibold text-white truncate">{u.username}</span>
                           </div>
                           <div className="flex flex-col items-end">
                             <span

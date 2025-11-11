@@ -659,7 +659,7 @@ const ChatBox: FC<ChatBoxProps> = ({
           <img src={profile.avatar || "/default-avatar.png"} alt={profile.username} className="w-6 h-6 rounded-full mr-3" />
           <div>
             {!isGroup && (
-            <div className="font-bold text-gray-900 dark:text-gray-100">{profile.username}</div>
+            <div className="text-md md:text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100 truncate">{profile.username}</div>
             )}
             {isGroup && (
               <>
@@ -710,7 +710,7 @@ const ChatBox: FC<ChatBoxProps> = ({
           </div>
 
           {/* Username */}
-          <div className="font-bold text-gray-900 dark:text-gray-100 text-lg">
+          <div className="text-lg md:text-xl font-semibold tracking-tight leading-tight text-gray-900 dark:text-gray-100 truncate">
             {profile.username}
           </div>
 
@@ -782,13 +782,13 @@ const ChatBox: FC<ChatBoxProps> = ({
               <div className="flex flex-col max-w-xs relative">
                 {/* Username and Timestamp */}
                 <div className="flex items-center space-x-2 text-xs text-gray-500 mb-1">
-                  <span className="font-semibold">{msg.senderName}</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{msg.senderName}</span>
                   <span>{timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
 
                 {/* Message content */}
                 <div
-                  className="break-words cursor-pointer"
+                  className="break-words cursor-pointer text-sm text-gray-800 dark:text-gray-200 leading-relaxed"
                   dangerouslySetInnerHTML={{ __html: msg.text }}
                   onMouseEnter={() => {
                     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
