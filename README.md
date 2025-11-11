@@ -825,3 +825,6 @@ service cloud.firestore {
     }
   }
 } -->
+
+
+<!-- https://baymard.com/homepage-and-category-usability/benchmark/page-types/homepage -->
