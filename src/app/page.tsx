@@ -46,7 +46,8 @@ export default function Home() {
 
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
-
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const notificationAudio = useRef<HTMLAudioElement | null>(null);
   const unsubscribersRef = useRef<(() => void)[]>([]);
   const sessionIdRef = useRef<string | null>(null);
@@ -57,7 +58,9 @@ export default function Home() {
   const [activeMenu, setActiveMenu] = useState<"home" | "notifications" | "logo">("home");
   const [isPrivateChatsOpen, setIsPrivateChatsOpen] = useState(false);
   const [isGroupChatsOpen, setIsGroupChatsOpen] = useState(false);
-  
+  const [pinnedUsers, setPinnedUsers] = useState<Set<string>>(new Set());
+  const [pinnedGroups, setPinnedGroups] = useState<Set<string>>(new Set());
+
   // Thread state (new unified state)
   const [threadState, setThreadState] = useState<{
     messageId: string;
@@ -573,6 +576,38 @@ export default function Home() {
     }
   };
 
+  // For Groups
+  const sortedGroups = [
+    ...groups.filter(g => pinnedGroups.has(g.id)),
+    ...groups.filter(g => !pinnedGroups.has(g.id))
+  ];
+
+  // For Users
+  const sortedUsers = [
+    ...users.filter(u => pinnedUsers.has(u.id)),
+    ...users.filter(u => !pinnedUsers.has(u.id))
+  ];
+
+  const togglePinGroup = (groupId: string) => {
+    setPinnedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(groupId)) {
+        newSet.delete(groupId);
+      } else {
+        newSet.add(groupId);
+      }
+      return newSet;
+    });
+  };
+  const togglePinUser = (userId: string) => {
+    setPinnedUsers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(userId)) newSet.delete(userId);
+      else newSet.add(userId);
+      return newSet;
+    });
+  };
+
   const handleCreateGroupSubmit = async (groupData: {
     name: string;
     avatar: string;
@@ -679,9 +714,19 @@ export default function Home() {
 
             <input
               type="text"
-              placeholder="Search..."
+              placeholder="Search messages..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full h-7 pl-8 pr-3 rounded-sm bg-[#58375C] text-white placeholder:text-xs placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="px-2 py-1 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-200"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
         <div className="flex w-full pt-11 pr-14 pb-6 pl-0 h-screen relative">
@@ -770,10 +815,10 @@ export default function Home() {
                         isGroupChatsOpen ? "max-h-[1000px]" : "max-h-0"
                       }`}
                     >
-                      {groups.map((g) => (
+                      {sortedGroups.map((g) => (
                         <li
                           key={g.id}
-                          className={`flex justify-between items-center px-3 py-2 rounded cursor-pointer transition ${
+                          className={`flex justify-between items-center w-full px-3 py-2 rounded cursor-pointer transition ${
                             chatUser?.id === g.id
                               ? "bg-gray-800"
                               : "hover:bg-gray-600 dark:hover:bg-gray-700"
@@ -795,6 +840,9 @@ export default function Home() {
                                 {unreadCounts[g.id]}
                               </span>
                             )}
+                            <button onClick={(e) => { e.stopPropagation(); togglePinGroup(g.id); }} className="text-xs text-gray-300 hover:text-yellow-400">
+                              {pinnedGroups.has(g.id) ? "📌" : "📍"}
+                            </button>
                           </div>
                         </li>
                       ))}
@@ -821,23 +869,26 @@ export default function Home() {
                         isPrivateChatsOpen ? "max-h-[1000px]" : "max-h-0"
                       }`}
                     >
-                      {users.map((u) => (
+                      {sortedUsers.map((u) => (
                         <li
                           key={u.id}
-                          className={`flex justify-between items-center px-3 py-2 rounded cursor-pointer transition ${
+                          className={`flex justify-between items-center w-full px-3 py-2 rounded cursor-pointer transition ${
                             chatUser?.id === u.id
                               ? "bg-gray-800"
                               : "hover:bg-gray-600 dark:hover:bg-gray-700"
                           }`}
                           onClick={() => handleSelectUser(u)}
                         >
-                          <div className="flex items-center space-x-2">
-                            <img src={u.avatar} alt={u.username} className="w-8 h-8 rounded-full" />
-                            <span className="text-sm font-semibold text-white truncate">{u.username}</span>
-                          </div>
-                          <div className="flex flex-col items-end">
+                        <div className="flex items-center space-x-2">
+                          {/* Avatar with Status Dot */}
+                          <div className="relative w-8 h-8">
+                            <img
+                              src={u.avatar}
+                              alt={u.username}
+                              className="w-8 h-8 rounded-full object-cover"
+                            />
                             <span
-                              className={`inline-block w-3 h-3 rounded-full ${
+                              className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-gray-800 ${
                                 userStatuses[u.id] === "online"
                                   ? "bg-green-500"
                                   : userStatuses[u.id] === "onBreak"
@@ -845,13 +896,23 @@ export default function Home() {
                                   : "bg-gray-400"
                               }`}
                             ></span>
-                            {unreadCounts[u.id] > 0 && (
-                              <span className="text-xs font-bold text-red-500">
-                                {unreadCounts[u.id]}
-                              </span>
-                            )}
                           </div>
-                        </li>
+
+                          <span className="text-sm font-semibold text-white truncate">{u.username}</span>
+                        </div>
+
+                        {/* Right-side controls: unread + pin */}
+                        <div className="flex items-center space-x-2">
+                          {unreadCounts[u.id] > 0 && (
+                            <span className="flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full">
+                              {unreadCounts[u.id] > 99 ? "99+" : unreadCounts[u.id]}
+                            </span>
+                          )}
+
+                          <button onClick={(e) => { e.stopPropagation(); togglePinUser(u.id); }} className="text-xs text-gray-300 hover:text-yellow-400" > {pinnedUsers.has(u.id) ? "📌" : "📍"} </button>
+                        </div>
+                      </li>
+
                       ))}
                     </ul>
                   </div>
@@ -867,6 +928,7 @@ export default function Home() {
                     currentUserId={user.uid}
                     isGroup={chatUser.isGroup || false}
                     groupMembers={chatUser.members || []}
+                    searchTerm={searchTerm}
                     onOpenThread={(message) => setThreadState({ messageId: message.id, message })}
                     threadState={threadState}
                   />

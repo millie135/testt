@@ -13,7 +13,8 @@ import {
   serverTimestamp,
   setDoc,
   getDoc,
-  getDocs
+  getDocs,
+  limit
 } from "firebase/firestore";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 //import ThreadChatBox from "./ThreadChatBox";
@@ -31,6 +32,7 @@ interface ChatBoxProps {
   groupMembers?: string[];
   onOpenThread?: (message: any) => void;
   threadState?: { messageId: string; message: Message } | null;
+  searchTerm?: string;
 }
 
 interface Message {
@@ -79,6 +81,7 @@ const parseEmojis = (text: string) => {
   return parsed;
 };
 
+
 function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -88,7 +91,8 @@ const ChatBox: FC<ChatBoxProps> = ({
   currentUserId,
   isGroup = false,
   groupMembers = [],
-  onOpenThread
+  onOpenThread,
+  searchTerm = ""
 }) => {
   // ---- STATE ----
   const [message, setMessage] = useState("");
@@ -169,11 +173,6 @@ const ChatBox: FC<ChatBoxProps> = ({
     : new Date().toLocaleString();
 
   // In ChatBox component
-  // const handleReplyClick = (message: Message) => {
-  //   onOpenThread?.(message); 
-  //   setSelectedMessageId(message.id);
-  // };
-
   const handleReplyClick = (msg: Message) => {
     onOpenThread?.(msg);
     setSelectedMessageId(msg.id);
@@ -404,70 +403,6 @@ const ChatBox: FC<ChatBoxProps> = ({
     return () => unsubscribeGroup();
   }, [chatWithUserId, isGroup]);
 
-  // ---- EFFECT: LISTEN TO MESSAGES (SAFE GUARD + CLEANUP) ----
-  /*useEffect(() => {
-    if (!currentUserId || !chatWithUserId) return;
-
-    let threadUnsubscribers: (() => void)[] = [];
-
-    const messagesRef = isGroup
-      ? collection(db, "groupChats", chatWithUserId, "messages")
-      : collection(db, "chats", currentUserId, chatWithUserId);
-
-    const q = query(messagesRef, orderBy("timestamp"));
-
-    const unsubscribe = onSnapshot(q, async snapshot => {
-      const msgs: Message[] = [];
-
-      // Cleanup previous thread listeners before adding new
-      threadUnsubscribers.forEach(fn => fn());
-      threadUnsubscribers = [];
-
-      for (const docSnap of snapshot.docs) {
-        const data = docSnap.data() as Omit<Message, "id">;
-        const messageId = docSnap.id;
-
-        const threadRef = isGroup
-          ? collection(db, "groupChats", chatWithUserId, "messages", messageId, "threads")
-          : collection(db, "chats", currentUserId, chatWithUserId, messageId, "threads");
-
-        const threadSnapshot = await getDocs(threadRef);
-        const threadUnsub = onSnapshot(threadRef, threadSnap => {
-          const count = threadSnap.size;
-          setMessages(prev =>
-            prev.map(m => m.id === messageId ? { ...m, threadCount: count } : m)
-          );
-        });
-        threadUnsubscribers.push(threadUnsub);
-
-        msgs.push({ id: messageId, ...data, threadCount: threadSnapshot.size });
-      }
-
-      setMessages(msgs);
-
-      // Mark as read
-      let newUnread = 0;
-      const batch: Promise<any>[] = [];
-      msgs.forEach(msg => {
-        if (!msg.readBy?.[currentUserId] && msg.senderId !== currentUserId) newUnread++;
-        if (!msg.readBy?.[currentUserId]) {
-          const msgRef = isGroup
-            ? doc(db, "groupChats", chatWithUserId, "messages", msg.id)
-            : doc(db, "chats", currentUserId, chatWithUserId, msg.id);
-          batch.push(setDoc(msgRef, { readBy: { ...(msg.readBy || {}), [currentUserId]: true } }, { merge: true }));
-        }
-      });
-      setUnreadCount(newUnread);
-      if (batch.length) await Promise.all(batch);
-    });
-
-    // Cleanup on unmount or logout
-    return () => {
-      unsubscribe();
-      threadUnsubscribers.forEach(fn => fn());
-    };
-  }, [chatWithUserId, currentUserId, isGroup]);*/
-
   useEffect(() => {
     if (!currentUserId || !chatWithUserId) return;
 
@@ -475,27 +410,23 @@ const ChatBox: FC<ChatBoxProps> = ({
       ? collection(db, "groupChats", chatWithUserId, "messages")
       : collection(db, "chats", currentUserId, chatWithUserId);
 
-    const q = query(messagesRef, orderBy("timestamp", "asc")); // optionally limit(50) for pagination
+    // Get last 20 messages, newest first
+    const q = query(messagesRef, orderBy("timestamp", "desc"), limit(20));
+
     let unsubThreadListeners: (() => void)[] = [];
 
     const unsubscribe = onSnapshot(q, async snapshot => {
-      // const msgs: Message[] = snapshot.docs.map(docSnap => {
-      //   const data = docSnap.data() as Omit<Message, "id">;
-      //   return { id: docSnap.id, threadCount: data.threadCount || 0, ...data };
-      // });
+      // Clear previous thread listeners
       unsubThreadListeners.forEach(fn => fn());
       unsubThreadListeners = [];
-      const msgs: Message[] = snapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Message, "id">),
-      }));
 
+      // Map messages and reverse for chronological order
+      const msgs: Message[] = snapshot.docs
+        .map(docSnap => ({ id: docSnap.id, ...(docSnap.data() as Omit<Message, "id">) }))
+        .reverse();
 
-      // Update messages state once
+      // Update messages state
       setMessages(msgs);
-
-      // Set up live thread count listeners
-      //const unsubThreadListeners: (() => void)[] = [];
 
       // Mark unread messages as read in batch
       const batch: Promise<any>[] = [];
@@ -509,9 +440,11 @@ const ChatBox: FC<ChatBoxProps> = ({
             setDoc(msgRef, { readBy: { ...(msg.readBy || {}), [currentUserId]: true } }, { merge: true })
           );
         }
+
+        // Thread listener
         const threadRef = isGroup
-        ? collection(db, "groupChats", chatWithUserId, "messages", msg.id, "threads")
-        : collection(db, "chats", currentUserId, chatWithUserId, msg.id, "threads");
+          ? collection(db, "groupChats", chatWithUserId, "messages", msg.id, "threads")
+          : collection(db, "chats", currentUserId, chatWithUserId, msg.id, "threads");
 
         const unsubscribeThread = onSnapshot(threadRef, snap => {
           const count = snap.size;
@@ -522,15 +455,10 @@ const ChatBox: FC<ChatBoxProps> = ({
 
         unsubThreadListeners.push(unsubscribeThread);
       });
-      if (batch.length) await Promise.all(batch);
 
-      // Update unread count
-      //const newUnread = msgs.filter(m => !m.readBy?.[currentUserId] && m.senderId !== currentUserId).length;
-      //setUnreadCount(newUnread);
-      //return () => unsubThreadListeners.forEach(fn => fn());
+      if (batch.length) await Promise.all(batch);
     });
 
-    //return () => unsubscribe();
     return () => {
       unsubscribe();
       unsubThreadListeners.forEach(fn => fn());
@@ -538,48 +466,17 @@ const ChatBox: FC<ChatBoxProps> = ({
   }, [chatWithUserId, currentUserId, isGroup]);
 
 
+  // Filter messages based on searchTerm
+const filteredMessages = searchTerm
+  ? messages.filter((msg) =>
+      msg.text.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  : messages;
+
+
   useEffect(scrollToBottom, [messages]);
 
   // ---- SEND MESSAGE ----
-  /*const sendMessage = async (text?: string, imageUrl?: string) => {
-    if (!text?.trim() && !imageUrl) return;
-    if (!currentUserId) return; // guard on logout
-
-    const senderSnap = await getDoc(doc(db, "users", currentUserId));
-    const senderData = senderSnap.data();
-    const senderName = senderData?.username || "Unknown";
-    const senderAvatar = senderData?.avatar || `https://avatars.dicebear.com/api/identicon/${currentUserId}.svg`;
-
-    const messageDocRef = isGroup
-      ? doc(collection(db, "groupChats", chatWithUserId, "messages"))
-      : doc(collection(db, "chats", currentUserId, chatWithUserId));
-
-    const messageData: Message = {
-      id: messageDocRef.id,
-      text: text || "",
-      senderId: currentUserId,
-      senderName,
-      senderAvatar,
-      timestamp: serverTimestamp(),
-      imageUrl: imageUrl ?? null,
-      reactions: {},
-      to: chatWithUserId,
-      readBy: { [currentUserId]: true },
-    };
-
-    try {
-      if (isGroup) await setDoc(messageDocRef, messageData);
-      else await Promise.all([
-        setDoc(messageDocRef, messageData),
-        setDoc(doc(db, "chats", chatWithUserId, currentUserId, messageDocRef.id), messageData),
-      ]);
-      setMessage("");
-      if (messageRef.current) messageRef.current.innerHTML = "";
-    } catch (err) {
-      console.error("Error sending message:", err);
-    }
-  };*/
-
   const sendMessage = async (text?: string, imageUrl?: string) => {
     if (!text?.trim() && !imageUrl) return;
     if (!currentUserId) return;
@@ -768,7 +665,7 @@ const ChatBox: FC<ChatBoxProps> = ({
         </div>
       )}  
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map(msg => {
+        {filteredMessages.map(msg => {
           const timestamp = msg.timestamp?.toDate ? msg.timestamp.toDate() : new Date();
           return (
             <div key={msg.id} className="flex justify-start items-start space-x-2 relative">
