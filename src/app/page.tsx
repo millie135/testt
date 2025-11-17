@@ -29,7 +29,6 @@ import {
 } from "firebase/firestore";
 import { ref, set as rtdbSet, onDisconnect, onValue } from "firebase/database";
 
-
 export default function Home() {
   const [showSignUp, setShowSignUp] = useState(true);
   const [user, setUser] = useState<UserType | null>(null);
@@ -120,10 +119,12 @@ export default function Home() {
 
           if (userSnap.exists()) {
             const data = userSnap.data();
-            if (data?.sessionId && data.sessionId !== "" && data.sessionId !== localSessionId) {
-              throw new Error("Your account is already logged in on another device.");
-            }
-            transaction.update(userRef, { sessionId: localSessionId });
+            // if (data?.sessionId && data.sessionId !== "" && data.sessionId !== localSessionId) {
+            //   throw new Error("Your account is already logged in on another device.");
+            // }
+            // transaction.update(userRef, { sessionId: localSessionId });
+            // Always overwrite sessionId to current device
+            transaction.update(userRef, { sessionId: localSessionId, lastSeen: serverTimestamp() });
           } else {
             transaction.set(userRef, { sessionId: localSessionId, createdAt: serverTimestamp() });
           }
@@ -375,6 +376,7 @@ export default function Home() {
     // Listen for connection state
     const connectedRef = ref(rtdb, ".info/connected");
     const userStatusRef = ref(rtdb, `/status/${user.uid}`);
+    //const userDocRef = doc(db, "users", user.uid);
 
     const unsubscribe = onValue(connectedRef, (snap) => {
       if (snap.val() === true) {
@@ -841,7 +843,7 @@ export default function Home() {
                               </span>
                             )}
                             <button onClick={(e) => { e.stopPropagation(); togglePinGroup(g.id); }} className="text-xs text-gray-300 hover:text-yellow-400">
-                              {pinnedGroups.has(g.id) ? "📌" : "📍"}
+                              {pinnedGroups.has(g.id) ? "📌" : "✦"}
                             </button>
                           </div>
                         </li>
@@ -909,7 +911,7 @@ export default function Home() {
                             </span>
                           )}
 
-                          <button onClick={(e) => { e.stopPropagation(); togglePinUser(u.id); }} className="text-xs text-gray-300 hover:text-yellow-400" > {pinnedUsers.has(u.id) ? "📌" : "📍"} </button>
+                          <button onClick={(e) => { e.stopPropagation(); togglePinUser(u.id); }} className="text-xs text-gray-300 hover:text-yellow-400" > {pinnedUsers.has(u.id) ? "📌" : "✦"} </button>
                         </div>
                       </li>
 

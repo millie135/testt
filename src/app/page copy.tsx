@@ -4,8 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import SignUp from "@/components/Auth/SignUp";
 import SignIn from "@/components/Auth/SignIn";
 import ChatBox from "@/components/Chat/ChatBox";
-import ManageMembersSidebar from "@/components/Chat/ManageMembersSidebar";
-import AddMemberModal from "@/components/Modals/AddMemberModal";
 import CreateGroupModal from "@/components/Modals/CreateGroupModal";
 import TimeManagement, { TimeManagementHandle } from "@/components/Time/TimeManagement";
 import { UserType, Group } from "@/types";
@@ -15,7 +13,6 @@ import { MessageSquare, House, Bell, ChevronDown, ChevronRight, Search } from "l
 import ThreadChatBox from "@/components/Chat/ThreadChatBox";
 import { usePresence } from "@/hooks/usePresence";
 
-
 import {
   collection,
   onSnapshot,
@@ -23,20 +20,14 @@ import {
   orderBy,
   getDoc,
   doc,
-  setDoc,
   serverTimestamp,
   updateDoc,
   where,
   getDocs,
-  arrayUnion,
   addDoc,
   runTransaction,
-  QuerySnapshot,
-  DocumentData,
-  arrayRemove, 
 } from "firebase/firestore";
 import { ref, set as rtdbSet, onDisconnect, onValue } from "firebase/database";
-
 
 export default function Home() {
   const [showSignUp, setShowSignUp] = useState(true);
@@ -44,7 +35,6 @@ export default function Home() {
   const [users, setUsers] = useState<UserType[]>([]);
   const [chatUser, setChatUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  //const [userStatuses, setUserStatuses] = useState<{ [key: string]: boolean }>({});
   type StatusType = "online" | "onBreak" | "offline";
 
   const [userStatuses, setUserStatuses] = useState<{ [key: string]: StatusType }>({});
@@ -53,15 +43,13 @@ export default function Home() {
   const prevUnreadCounts = useRef<{ [key: string]: number }>({});
   const [groups, setGroups] = useState<Group[]>([]);
 
-  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
-
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const notificationAudio = useRef<HTMLAudioElement | null>(null);
   const unsubscribersRef = useRef<(() => void)[]>([]);
   const sessionIdRef = useRef<string | null>(null);
-  const [showManageMembers, setShowManageMembers] = useState(false);
   const isManualLogout = useRef(false);
   const groupListenersRef = useRef<{ [groupId: string]: () => void }>({});
   // inside Home component
@@ -69,12 +57,10 @@ export default function Home() {
   const [activeMenu, setActiveMenu] = useState<"home" | "notifications" | "logo">("home");
   const [isPrivateChatsOpen, setIsPrivateChatsOpen] = useState(false);
   const [isGroupChatsOpen, setIsGroupChatsOpen] = useState(false);
-  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
-  const [selectedMessage, setSelectedMessage] = useState<any>(null);
-  
-  // ------------------------
+  const [pinnedUsers, setPinnedUsers] = useState<Set<string>>(new Set());
+  const [pinnedGroups, setPinnedGroups] = useState<Set<string>>(new Set());
+
   // Thread state (new unified state)
-  // ------------------------
   const [threadState, setThreadState] = useState<{
     messageId: string;
     message: any;
@@ -82,7 +68,6 @@ export default function Home() {
 
   usePresence(user?.uid);
 
-  // After user login (inside auth.onAuthStateChanged)
   //timeManagementRef.current?.autoCheckIn();
   useEffect(() => {
     timeManagementRef.current?.autoCheckIn();
@@ -95,9 +80,7 @@ export default function Home() {
     }
   }, [user]);
 
-  // -------------------
   // Firebase: Auth State + Single Session
-  // -------------------
   useEffect(() => {
     // Safe UUID generator (works even if crypto.randomUUID is missing)
     function generateUUID(): string {
@@ -173,9 +156,7 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
-  // -------------------
   // Real-time logout if sessionId changes
-  // -------------------
   useEffect(() => {
     if (!user) return;
 
@@ -198,9 +179,7 @@ export default function Home() {
     return () => unsubscribe();
   }, [user]);
 
-  // ------------------------
   // Fetch Users
-  // ------------------------
   useEffect(() => {
     if (!user) return;
 
@@ -208,9 +187,7 @@ export default function Home() {
     unsubscribersRef.current.forEach((fn) => fn());
     unsubscribersRef.current = [];
 
-    // -------------------
     // Users
-    // -------------------
     const usersQuery =
       user.role === "Leader"
         ? collection(db, "users") // Leader sees all
@@ -237,9 +214,7 @@ export default function Home() {
     );
     unsubscribersRef.current.push(unsubUsers);
 
-    // -------------------
     // Groups
-    // -------------------
     const groupsQuery =
       user.role === "Leader"
         ? collection(db, "groups") // Leader sees all groups
@@ -262,17 +237,13 @@ export default function Home() {
     );
     unsubscribersRef.current.push(unsubGroups);
 
-    // -------------------
     // Cleanup
-    // -------------------
     return () => {
       unsubscribersRef.current.forEach((fn) => fn());
     };
   }, [user, chatUser]);
 
-  // ------------------------
   // Fetch Groups
-  // ------------------------
   useEffect(() => {
     if (!user) return;
 
@@ -305,9 +276,7 @@ export default function Home() {
     return () => unsub();
   }, [user, chatUser]);
 
-  // ------------------------
   // Subscribe to chats
-  // ------------------------
   useEffect(() => {
     if (!user || !users.length || !groups.length) return;
 
@@ -398,16 +367,14 @@ export default function Home() {
 
   }, [user, users]);
 
-  // -------------------
   // Track Online Status
-  // -------------------
-
   useEffect(() => {
     if (!user) return;
 
     // Listen for connection state
     const connectedRef = ref(rtdb, ".info/connected");
     const userStatusRef = ref(rtdb, `/status/${user.uid}`);
+    //const userDocRef = doc(db, "users", user.uid);
 
     const unsubscribe = onValue(connectedRef, (snap) => {
       if (snap.val() === true) {
@@ -455,51 +422,47 @@ export default function Home() {
 
     const unsubscribers: (() => void)[] = [];
 
-    // -------------------
     // One-to-One Chats
-    // -------------------
     const chatUsers = users.filter(u => 
       user.role === "Leader" || u.role === "Leader"
     );
 
-      chatUsers.forEach((u) => {
-        const messagesRef = collection(db, "chats", user.uid, u.id);
-        const q = query(messagesRef, orderBy("timestamp", "desc"));
+    chatUsers.forEach((u) => {
+      const messagesRef = collection(db, "chats", user.uid, u.id);
+      const q = query(messagesRef, orderBy("timestamp", "desc"));
 
-        try {
-          const unsubscribe = onSnapshot(q, async (snapshot) => {
-            const unreadDocs = snapshot.docs.filter(
-              (doc) => doc.data().senderId === u.id && !doc.data().read
+      try {
+        const unsubscribe = onSnapshot(q, async (snapshot) => {
+          const unreadDocs = snapshot.docs.filter(
+            (doc) => doc.data().senderId === u.id && !doc.data().read
+          );
+
+          if (chatUser?.id === u.id && unreadDocs.length > 0) {
+            const updates = unreadDocs.map((docSnap) =>
+              updateDoc(docSnap.ref, { read: true })
             );
+            await Promise.all(updates);
+          }
 
-            if (chatUser?.id === u.id && unreadDocs.length > 0) {
-              const updates = unreadDocs.map((docSnap) =>
-                updateDoc(docSnap.ref, { read: true })
-              );
-              await Promise.all(updates);
-            }
+          const unreadCount = chatUser?.id === u.id ? 0 : unreadDocs.length;
 
-            const unreadCount = chatUser?.id === u.id ? 0 : unreadDocs.length;
+          setUnreadCounts((prev) => ({ ...prev, [u.id]: unreadCount }));
 
-            setUnreadCounts((prev) => ({ ...prev, [u.id]: unreadCount }));
+          if (unreadCount > (prevUnreadCounts.current[u.id] || 0) && chatUser?.id !== u.id) {
+            notificationAudio.current?.play().catch(() => {});
+          }
+          prevUnreadCounts.current[u.id] = unreadCount;
+        });
 
-            if (unreadCount > (prevUnreadCounts.current[u.id] || 0) && chatUser?.id !== u.id) {
-              notificationAudio.current?.play().catch(() => {});
-            }
-            prevUnreadCounts.current[u.id] = unreadCount;
-          });
+        unsubscribers.push(unsubscribe);
+        unsubscribersRef.current.push(unsubscribe);
 
-          unsubscribers.push(unsubscribe);
-          unsubscribersRef.current.push(unsubscribe);
+      } catch (error: any) {
+        if (error.code !== "permission-denied") console.error(error);
+      }
+    });
 
-        } catch (error: any) {
-          if (error.code !== "permission-denied") console.error(error);
-        }
-      });
-
-    // -------------------
     // Group Chats
-    // -------------------
     groups.forEach((g) => {
       // Skip if user is not allowed by rules
       if (!(g.members?.includes(user.uid) || user.role === "Leader")) return;
@@ -562,12 +525,9 @@ export default function Home() {
     };
   }, [users, groups, user, chatUser]);
 
-
-  // -------------------
   // Handlers
-  // -------------------
   const handleSelectUser = async (u: UserType) => {
-    if (!user) return; // <--- add this line
+    if (!user) return; 
     // Prevent users from chatting with non-leaders
     if (user.role === "user" && u.role !== "Leader") {
       alert("You can only chat privately with leaders.");
@@ -616,30 +576,55 @@ export default function Home() {
     }
   };
 
+  // For Groups
+  const sortedGroups = [
+    ...groups.filter(g => pinnedGroups.has(g.id)),
+    ...groups.filter(g => !pinnedGroups.has(g.id))
+  ];
 
-  const handleAddMember = async (groupId: string, memberId: string) => {
-    const groupRef = doc(db, "groups", groupId);
-    await updateDoc(groupRef, {
-      members: arrayUnion(memberId),
+  // For Users
+  const sortedUsers = [
+    ...users.filter(u => pinnedUsers.has(u.id)),
+    ...users.filter(u => !pinnedUsers.has(u.id))
+  ];
+
+  const togglePinGroup = (groupId: string) => {
+    setPinnedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(groupId)) {
+        newSet.delete(groupId);
+      } else {
+        newSet.add(groupId);
+      }
+      return newSet;
+    });
+  };
+  const togglePinUser = (userId: string) => {
+    setPinnedUsers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(userId)) newSet.delete(userId);
+      else newSet.add(userId);
+      return newSet;
     });
   };
 
-  const handleRemoveMember = async (groupId: string, memberId: string) => {
-    const groupRef = doc(db, "groups", groupId);
-    await updateDoc(groupRef, {
-      members: arrayRemove(memberId),
-    });
-  };
-
-  const handleCreateGroupSubmit = async (groupName: string, avatar: string) => {
+  const handleCreateGroupSubmit = async (groupData: {
+    name: string;
+    avatar: string;
+    createdBy: string;
+    members: string[];
+    createdAt: Date;
+  }) => {
     if (!user || user.role !== "Leader") return alert("Only leaders can create groups");
-    if (!groupName.trim()) return;
+
     try {
       await addDoc(collection(db, "groups"), {
-        name: groupName.trim(),
-        members: [user.uid],
-        avatar,
-        createdAt: serverTimestamp(),
+        name: groupData.name.trim(),
+        avatar: groupData.avatar,
+        //members: groupData.members,
+        members: [user.uid],          
+        createdBy: user.uid,    
+        createdAt: serverTimestamp(), 
       });
       setNewGroupName("");
       setShowCreateGroupModal(false);
@@ -649,9 +634,7 @@ export default function Home() {
     }
   };
 
-  // -------------------
   // Render
-  // -------------------
   if (loading)
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -731,240 +714,23 @@ export default function Home() {
 
             <input
               type="text"
-              placeholder="Search..."
+              placeholder="Search messages..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full h-7 pl-8 pr-3 rounded-sm bg-[#58375C] text-white placeholder:text-xs placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="px-2 py-1 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-200"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
         <div className="flex w-full pt-11 pr-14 pb-6 pl-0 h-screen relative">
-          
-          {/* {activeMenu === "home" && (
-            <>
-            <aside className="flex-[1] border border-white/50 bg-[#030637] flex flex-col rounded-l-md overflow-hidden">
-              <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="relative w-10 h-10">
-                    <img
-                      src={user.avatar}
-                      alt={user.username}
-                      className="w-10 h-10 rounded-full object-cover"
-                    />
-
-                    <span
-                      className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white
-                        ${
-                          userStatuses[user.uid] === "online"
-                            ? "bg-green-500"
-                            : userStatuses[user.uid] === "onBreak"
-                            ? "bg-yellow-400 shadow-md"
-                            : "bg-gray-400"
-                        }`}
-                      title={
-                        userStatuses[user.uid] === "online"
-                          ? "Online"
-                          : userStatuses[user.uid] === "onBreak"
-                          ? "On Break"
-                          : "Offline"
-                      }
-                    ></span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-white">{user.username}</p>
-                    <p className="text-xs text-gray-500">{user.role}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={handleSignOut}
-                  className="text-sm px-3 py-1 bg-[#720455] hover:bg-[#910A67] text-white rounded"
-                >
-                  Sign out
-                </button>
-              </div>
-
-              
-              <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2 cursor-pointer justify-between w-full" onClick={() => setIsGroupChatsOpen(!isGroupChatsOpen)}>
-                      <div className="flex items-center">
-                        <div className="flex items-center">
-                          
-                          {isGroupChatsOpen ? (
-                            <ChevronDown className="w-4 h-4 text-white" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4 text-white" />
-                          )}
-                          <h3 className="text-sm uppercase tracking-wide text-white px-2">Group Chats</h3>
-                        </div>
-                      </div>
-                      <div>
-                        {user.role === "Leader" && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation(); 
-                            setShowCreateGroupModal(true);
-                          }}
-                          className="text-xs px-2 py-1 bg-[#720455] hover:bg-[#910A67] text-white rounded"
-                        >
-                          + New
-                        </button>
-                      )}
-                      </div>
-                    </div>
-                  </div>
-                  <ul
-                    className={`space-y-1 overflow-hidden transition-[max-height] duration-300 ${
-                      isGroupChatsOpen ? "max-h-[1000px]" : "max-h-0"
-                    }`}
-                  >
-                    {groups.map((g) => (
-                      <li
-                        key={g.id}
-                        className={`flex justify-between items-center px-3 py-2 rounded cursor-pointer transition ${
-                          chatUser?.id === g.id
-                            ? "bg-gray-800"
-                            : "hover:bg-gray-600 dark:hover:bg-gray-700"
-                        }`}
-                        onClick={() => handleSelectGroup(g)}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <img
-                            src={g.avatar || `https://api.dicebear.com/9.x/lorelei/svg?seed=${g.name}`}
-                            alt={g.name}
-                            className="w-8 h-8 rounded-full"
-                          />
-                          <span className="text-white">{g.name}</span>
-                        </div>
-
-                        <div className="flex items-center space-x-1">
-                          {unreadCounts[g.id] > 0 && (
-                            <span className="text-xs font-bold text-red-500">
-                              {unreadCounts[g.id]}
-                            </span>
-                          )}
-                          {user.role === "Leader" && (
-                            <button
-                              className="text-xs px-2 py-0.5 bg-[#910A67] text-white rounded hover:bg-[#910A67]"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedGroup(g);
-                                setShowManageMembers(true);
-                              }}
-                            >
-                              Manage
-                            </button>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                
-                <div>
-                  <div
-                    className="flex items-center justify-start cursor-pointer mb-2 space-x-2"
-                    onClick={() => setIsPrivateChatsOpen(!isPrivateChatsOpen)}
-                  >
-                    
-                    {isPrivateChatsOpen ? (
-                      <ChevronDown className="w-4 h-4 text-white" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4 text-white" />
-                    )}
-                    <h3 className="text-sm uppercase tracking-wide text-white">Private Chats</h3>
-                  </div>
-                  <ul
-                    className={`space-y-1 overflow-hidden transition-[max-height] duration-300 ${
-                      isPrivateChatsOpen ? "max-h-[1000px]" : "max-h-0"
-                    }`}
-                  >
-                    {users.map((u) => (
-                      <li
-                        key={u.id}
-                        className={`flex justify-between items-center px-3 py-2 rounded cursor-pointer transition ${
-                          chatUser?.id === u.id
-                            ? "bg-gray-800"
-                            : "hover:bg-gray-600 dark:hover:bg-gray-700"
-                        }`}
-                        onClick={() => handleSelectUser(u)}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <img src={u.avatar} alt={u.username} className="w-8 h-8 rounded-full" />
-                          <span className="text-white">{u.username}</span>
-                        </div>
-                        <div className="flex flex-col items-end">
-                          <span
-                            className={`inline-block w-3 h-3 rounded-full ${
-                              userStatuses[u.id] === "online"
-                                ? "bg-green-500"
-                                : userStatuses[u.id] === "onBreak"
-                                ? "bg-yellow-400"
-                                : "bg-gray-400"
-                            }`}
-                          ></span>
-                          {unreadCounts[u.id] > 0 && (
-                            <span className="text-xs font-bold text-red-500">
-                              {unreadCounts[u.id]}
-                            </span>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </aside>
-
-            <main className="relative flex-[6] flex flex-col bg-white dark:border-gray-800 rounded-r-md overflow-hidden">
-              {chatUser ? (
-                <>
-                <ChatBox
-                  key={chatUser.id}
-                  chatWithUserId={chatUser.id}
-                  chatWithUsername={chatUser.username}
-                  currentUserId={user.uid}
-                  isGroup={chatUser.isGroup || false}
-                  groupMembers={chatUser.members || []}
-                  onOpenThread={(message) => setThreadState({ messageId: message.id, message })}
-                  threadState={threadState}
-                />
-
-                {threadState && (
-                  <ThreadChatBox
-                    parentMessage={threadState.message}
-                    currentUserId={user.uid}
-                    chatWithUserId={chatUser.id}
-                    isGroup={chatUser.isGroup || false}
-                    // onClose={() => setSelectedMessageId(null)}
-                    // onThreadSent={() => setSelectedMessageId(null)}
-                    onClose={() => setThreadState(null)}
-                    onThreadSent={() => setThreadState(null)}
-                  />
-                )}
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center flex-1 text-gray-500">  
-                  <MessageSquare size={60} className="text-gray-400 mb-6" />
-                  <p className="text-2xl font-semibold text-gray-800 mb-2">You have no conversations yet</p>
-                  <p className="text-sm text-gray-500">Start a chat to see messages here</p>
-                </div>
-
-              )}
-            </main>
-            </>
-          )}
-          {activeMenu === "notifications" && user && (
-            <main className="flex-1 flex flex-col md:flex-row bg-white dark:bg-neutral-800 rounded-md overflow-visible p-4">
-              <aside className="flex-1 md:flex-[5] p-4">
-                <TimeManagement userId={user.uid} ref={timeManagementRef} />
-              </aside>
-              <div className="flex-1" /> 
-            </main>
-          )} */}
-
           <main className="flex-1 flex flex-col md:flex-row bg-white dark:bg-neutral-800 rounded-md overflow-visible p-4 relative">
-
             {/* Sidebar + Chat */}
             <div
               className={`absolute inset-0 transition-all duration-500 ease-in-out transform flex flex-1 md:flex-row
@@ -999,21 +765,20 @@ export default function Home() {
                       ></span>
                     </div>
                     <div>
-                      <p className="font-semibold text-white">{user.username}</p>
-                      <p className="text-xs text-gray-500">{user.role}</p>
+                      <p className="text-sm font-semibold text-white truncate">{user.username}</p>
+                      <p className="text-xs text-gray-400 truncate">{user.role}</p>
                     </div>
                   </div>
                   <button
                     onClick={handleSignOut}
-                    className="text-sm px-3 py-1 bg-[#720455] hover:bg-[#910A67] text-white rounded"
+                    className="text-sm  font-semibold px-2 py-1 bg-[#720455] hover:bg-[#910A67] text-white rounded-sm transition-colors duration-200"
                   >
-                    Sign out
+                    SIGN OUT
                   </button>
-                </div>
 
+                </div>
                         
-                <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                  
+                <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-white scrollbar-track-transparent scrollbar-fast">
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center space-x-2 cursor-pointer justify-between w-full" onClick={() => setIsGroupChatsOpen(!isGroupChatsOpen)}>
@@ -1025,7 +790,9 @@ export default function Home() {
                             ) : (
                               <ChevronRight className="w-4 h-4 text-white" />
                             )}
-                            <h3 className="text-sm uppercase tracking-wide text-white px-2">Group Chats</h3>
+                            <h3 className="text-sm font-bold uppercase tracking-tight text-white px-2">
+                              Group Chats
+                            </h3>
                           </div>
                         </div>
                         <div>
@@ -1035,7 +802,7 @@ export default function Home() {
                               e.stopPropagation(); 
                               setShowCreateGroupModal(true);
                             }}
-                            className="text-xs px-2 py-1 bg-[#720455] hover:bg-[#910A67] text-white rounded"
+                            className="text-sm font-semibold px-2 py-1 bg-[#720455] hover:bg-[#910A67] text-white rounded-md transition-colors duration-200"
                           >
                             + New
                           </button>
@@ -1048,10 +815,10 @@ export default function Home() {
                         isGroupChatsOpen ? "max-h-[1000px]" : "max-h-0"
                       }`}
                     >
-                      {groups.map((g) => (
+                      {sortedGroups.map((g) => (
                         <li
                           key={g.id}
-                          className={`flex justify-between items-center px-3 py-2 rounded cursor-pointer transition ${
+                          className={`flex justify-between items-center w-full px-3 py-2 rounded cursor-pointer transition ${
                             chatUser?.id === g.id
                               ? "bg-gray-800"
                               : "hover:bg-gray-600 dark:hover:bg-gray-700"
@@ -1064,7 +831,7 @@ export default function Home() {
                               alt={g.name}
                               className="w-8 h-8 rounded-full"
                             />
-                            <span className="text-white">{g.name}</span>
+                            <span className="text-sm font-semibold text-white truncate">{g.name}</span>
                           </div>
 
                           <div className="flex items-center space-x-1">
@@ -1073,18 +840,9 @@ export default function Home() {
                                 {unreadCounts[g.id]}
                               </span>
                             )}
-                            {user.role === "Leader" && (
-                              <button
-                                className="text-xs px-2 py-0.5 bg-[#910A67] text-white rounded hover:bg-[#910A67]"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedGroup(g);
-                                  setShowManageMembers(true);
-                                }}
-                              >
-                                Manage
-                              </button>
-                            )}
+                            <button onClick={(e) => { e.stopPropagation(); togglePinGroup(g.id); }} className="text-xs text-gray-300 hover:text-yellow-400">
+                              {pinnedGroups.has(g.id) ? "📌" : "✦"}
+                            </button>
                           </div>
                         </li>
                       ))}
@@ -1102,30 +860,35 @@ export default function Home() {
                       ) : (
                         <ChevronRight className="w-4 h-4 text-white" />
                       )}
-                      <h3 className="text-sm uppercase tracking-wide text-white">Private Chats</h3>
+                      <h3 className="text-sm font-bold uppercase tracking-tight text-white px-2">
+                        Private Chats
+                      </h3>
                     </div>
                     <ul
                       className={`space-y-1 overflow-hidden transition-[max-height] duration-300 ${
                         isPrivateChatsOpen ? "max-h-[1000px]" : "max-h-0"
                       }`}
                     >
-                      {users.map((u) => (
+                      {sortedUsers.map((u) => (
                         <li
                           key={u.id}
-                          className={`flex justify-between items-center px-3 py-2 rounded cursor-pointer transition ${
+                          className={`flex justify-between items-center w-full px-3 py-2 rounded cursor-pointer transition ${
                             chatUser?.id === u.id
                               ? "bg-gray-800"
                               : "hover:bg-gray-600 dark:hover:bg-gray-700"
                           }`}
                           onClick={() => handleSelectUser(u)}
                         >
-                          <div className="flex items-center space-x-2">
-                            <img src={u.avatar} alt={u.username} className="w-8 h-8 rounded-full" />
-                            <span className="text-white">{u.username}</span>
-                          </div>
-                          <div className="flex flex-col items-end">
+                        <div className="flex items-center space-x-2">
+                          {/* Avatar with Status Dot */}
+                          <div className="relative w-8 h-8">
+                            <img
+                              src={u.avatar}
+                              alt={u.username}
+                              className="w-8 h-8 rounded-full object-cover"
+                            />
                             <span
-                              className={`inline-block w-3 h-3 rounded-full ${
+                              className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-gray-800 ${
                                 userStatuses[u.id] === "online"
                                   ? "bg-green-500"
                                   : userStatuses[u.id] === "onBreak"
@@ -1133,19 +896,28 @@ export default function Home() {
                                   : "bg-gray-400"
                               }`}
                             ></span>
-                            {unreadCounts[u.id] > 0 && (
-                              <span className="text-xs font-bold text-red-500">
-                                {unreadCounts[u.id]}
-                              </span>
-                            )}
                           </div>
-                        </li>
+
+                          <span className="text-sm font-semibold text-white truncate">{u.username}</span>
+                        </div>
+
+                        {/* Right-side controls: unread + pin */}
+                        <div className="flex items-center space-x-2">
+                          {unreadCounts[u.id] > 0 && (
+                            <span className="flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full">
+                              {unreadCounts[u.id] > 99 ? "99+" : unreadCounts[u.id]}
+                            </span>
+                          )}
+
+                          <button onClick={(e) => { e.stopPropagation(); togglePinUser(u.id); }} className="text-xs text-gray-300 hover:text-yellow-400" > {pinnedUsers.has(u.id) ? "📌" : "✦"} </button>
+                        </div>
+                      </li>
+
                       ))}
                     </ul>
                   </div>
                 </div>
               </aside>
-
               <main className="relative flex-[6] flex flex-col bg-white dark:border-gray-800 rounded-r-md overflow-hidden">
                 {chatUser ? (
                   <>
@@ -1156,20 +928,20 @@ export default function Home() {
                     currentUserId={user.uid}
                     isGroup={chatUser.isGroup || false}
                     groupMembers={chatUser.members || []}
+                    searchTerm={searchTerm}
                     onOpenThread={(message) => setThreadState({ messageId: message.id, message })}
                     threadState={threadState}
                   />
 
-                  {threadState && (
+                  {threadState?.message && (
                     <ThreadChatBox
                       parentMessage={threadState.message}
                       currentUserId={user.uid}
                       chatWithUserId={chatUser.id}
                       isGroup={chatUser.isGroup || false}
-                      // onClose={() => setSelectedMessageId(null)}
-                      // onThreadSent={() => setSelectedMessageId(null)}
+                      groupName={chatUser.username || "Group"}
                       onClose={() => setThreadState(null)}
-                      onThreadSent={() => setThreadState(null)}
+                      //onThreadSent={() => setThreadState(null)}
                     />
                   )}
                   </>
@@ -1191,54 +963,13 @@ export default function Home() {
             >
               <TimeManagement userId={user.uid} ref={timeManagementRef} />
             </div>
-
-
           </main>
-
-
-
-
-          {/* === Right Sidebar (free space) === */}
-          {/* <aside className="hidden md:flex flex-[5] bg-gray-50 dark:bg-gray-900 p-4">
-            <TimeManagement userId={user.uid} ref={timeManagementRef} />
-          </aside> */}
-
-        {/* === Manage Members Modal (centered) === */}
-        {showManageMembers && selectedGroup && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            {/* Darker but clearer blur overlay */}
-            <div
-              className="absolute inset-0 bg-black/35 backdrop-blur-sm"
-              onClick={() => setShowManageMembers(false)}
-            />
-
-            {/* Modal content */}
-            <div className="relative bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg w-96 z-10">
-              <ManageMembersSidebar
-                group={selectedGroup}
-                users={users}
-                onAddMember={(memberId) => handleAddMember(selectedGroup.id, memberId)}
-                onRemoveMember={(memberId) => handleRemoveMember(selectedGroup.id, memberId)}
-                onClose={() => setShowManageMembers(false)}
-              />
-            </div>
-          </div>
-        )}
 
         {/* === Modals === */}
         {showCreateGroupModal && (
           <CreateGroupModal
             onClose={() => setShowCreateGroupModal(false)}
             onSubmit={handleCreateGroupSubmit}
-          />
-        )}
-
-        {showAddMemberModal && selectedGroup && (
-          <AddMemberModal
-            group={selectedGroup}
-            users={users}
-            onAddMember={(memberId) => handleAddMember(selectedGroup.id, memberId)}
-            onClose={() => setShowAddMemberModal(false)}
           />
         )}
         </div>

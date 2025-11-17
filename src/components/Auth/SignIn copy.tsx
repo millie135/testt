@@ -54,11 +54,11 @@ export default function SignIn() {
       }
 
       // Block login if another session exists
-      // if (data?.sessionId && data.sessionId !== localSessionId) {
-      //   await auth.signOut();
-      //   setError("Your account is already logged in on another device.");
-      //   return;
-      // }
+      if (data?.sessionId && data.sessionId !== localSessionId) {
+        await auth.signOut();
+        setError("Your account is already logged in on another device.");
+        return;
+      }
 
       // Update Firestore session
       await updateDoc(userRef, { sessionId: localSessionId, lastSeen: serverTimestamp() });
@@ -133,3 +133,4 @@ export default function SignIn() {
     </div>
   );
 }
+
